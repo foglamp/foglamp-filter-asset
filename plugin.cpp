@@ -15,7 +15,7 @@
 #include <filter.h>
 #include <reading_set.h>
 
-#define RULES "\"rules\" : []"
+#define RULES "\\\"rules\\\" : []"
 #define FILTER_NAME "asset"
 
 #define DEFAULT_CONFIG "{\"plugin\" : { \"description\" : \"Asset filter plugin\", " \
@@ -27,7 +27,7 @@
 				"\"default\": \"false\" }, " \
 			"\"config\" : {\"description\" : \"Asset C filter configuration.\", " \
 				"\"type\" : \"JSON\", " \
-				"\"default\" : {" RULES "}} }"
+				"\"default\" : \"{" RULES "}\"} }"
 
 using namespace std;
 

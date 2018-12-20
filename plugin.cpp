@@ -252,6 +252,104 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 }
 
 /**
+ * Plugin reconfiguration entry point
+ *
+ * @param	handle	The plugin handle
+ * @param	newConfig	The new configuration data
+ */
+void plugin_reconfigure(PLUGIN_HANDLE *handle, const string& newConfig)
+{
+	FILTER_INFO *info = (FILTER_INFO *) handle;
+	FogLampFilter* filter = info->handle;
+
+	filter->setConfig(newConfig);
+
+	if (filter->getConfig().itemExists("config"))
+	{
+		FILTER_INFO *newInfo = new FILTER_INFO;
+		newInfo->assetFilterConfig = new std::map<std::string, AssetAction>;
+		Document	document;
+		if (document.Parse(filter->getConfig().getValue("config").c_str()).HasParseError())
+		{
+			Logger::getLogger()->error("Unable to parse filter config: '%s'", filter->getConfig().getValue("config").c_str());
+			return;
+		}
+		
+		newInfo->defaultAction = {action::INCLUDE, ""};
+		Value::MemberIterator defaultAction = document.FindMember("defaultAction");
+	    if(defaultAction == document.MemberEnd() || !defaultAction->value.IsString())
+		{
+			newInfo->defaultAction.actn = action::INCLUDE;
+			Logger::getLogger()->info("Parse asset filter config, unable to find defaultAction value: '%s', assuming 'include' for unmentioned asset names", filter->getConfig().getValue("config").c_str());
+		}
+		else
+		{
+			string actionStr= defaultAction->value.GetString();
+			for (auto & c: actionStr) c = tolower(c);
+			action actn;
+			if (actionStr == "include")
+				newInfo->defaultAction.actn = action::INCLUDE;
+			else if (actionStr == "exclude")
+				newInfo->defaultAction.actn = action::EXCLUDE;
+			else
+			{
+				Logger::getLogger()->error("Parse asset filter config, unable to parse defaultAction value: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			Logger::getLogger()->info("Parse asset filter config, default action for unmentioned asset names=%d", newInfo->defaultAction.actn);
+		}
+		
+		Value &rules = document["rules"];
+		if (!rules.IsArray())
+		{
+			Logger::getLogger()->error("Parse asset filter config, rules array is missing : '%s'", filter->getConfig().getValue("config").c_str());
+			return;
+		}
+		for (Value::ConstValueIterator iter = rules.Begin(); iter != rules.End(); ++iter)
+		{
+			if (!iter->IsObject())
+			{
+				Logger::getLogger()->error("Parse asset filter config, each entry in rules array must be an object: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			if (!iter->HasMember("asset_name") || !iter->HasMember("action"))
+			{
+				Logger::getLogger()->error("Parse asset filter config, asset_name/action is not found in the entry: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			
+			string asset_name = (*iter)["asset_name"].GetString();
+			string actionStr= (*iter)["action"].GetString();
+			string new_asset_name = "";
+			for (auto & c: actionStr) c = tolower(c);
+			action actn;
+			if (actionStr == "include")
+				actn = action::INCLUDE;
+			else if (actionStr == "exclude")
+				actn = action::EXCLUDE;
+			else if (actionStr == "rename")
+			{
+				actn = action::RENAME;
+				if (iter->HasMember("new_asset_name"))
+					new_asset_name = (*iter)["new_asset_name"].GetString();
+				else
+				{
+					Logger::getLogger()->error("Parse asset filter config, new_asset_name is not found in the RENAME entry: '%s'", filter->getConfig().getValue("config").c_str());
+					return;
+				}
+			}
+			Logger::getLogger()->info("Parse asset filter config, Adding to assetFilterConfig map: {%s, %d, %s}", asset_name.c_str(), actn, new_asset_name.c_str());
+			(*newInfo->assetFilterConfig)[asset_name] = {actn, new_asset_name};
+		}
+		auto tmp = new std::map<std::string, AssetAction>;
+		tmp = info->assetFilterConfig;
+		info->assetFilterConfig = newInfo->assetFilterConfig;
+		delete tmp;
+		info->defaultAction = newInfo->defaultAction;
+	}
+}
+
+/**
  * Call the shutdown method in the plugin
  */
 void plugin_shutdown(PLUGIN_HANDLE *handle)

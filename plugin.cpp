@@ -26,7 +26,7 @@
 				"\"displayName\": \"Enable\", " \
 				"\"type\": \"boolean\", " \
 				"\"default\": \"false\" }, " \
-			"\"config\" : {\"description\" : \"JSON docuemnt that defines the rules for asset names.\", " \
+			"\"config\" : {\"description\" : \"JSON document that defines the rules for asset names.\", " \
 				"\"type\" : \"JSON\", " \
 				"\"default\" : \"{" RULES "}\", " \
 				"\"order\" : \"1\", \"displayName\" : \"Asset rules\"} }"

@@ -20,14 +20,16 @@
 
 #define DEFAULT_CONFIG "{\"plugin\" : { \"description\" : \"Asset filter plugin\", " \
                        		"\"type\" : \"string\", " \
-				"\"default\" : \"" FILTER_NAME "\" }, " \
+				"\"default\" : \"" FILTER_NAME "\", \"readonly\" : \"true\" }, " \
 			 "\"enable\": {\"description\": \"A switch that can be used to enable or disable execution of " \
 					 "the asset filter.\", " \
+				"\"displayName\": \"Enabled\", " \
 				"\"type\": \"boolean\", " \
 				"\"default\": \"false\" }, " \
-			"\"config\" : {\"description\" : \"Asset C filter configuration.\", " \
+			"\"config\" : {\"description\" : \"JSON document that defines the rules for asset names.\", " \
 				"\"type\" : \"JSON\", " \
-				"\"default\" : \"{" RULES "}\"} }"
+				"\"default\" : \"{" RULES "}\", " \
+				"\"order\" : \"1\", \"displayName\" : \"Asset rules\"} }"
 
 using namespace std;
 
@@ -45,7 +47,7 @@ static PLUGIN_INFORMATION info = {
         0,                        // Flags
         PLUGIN_TYPE_FILTER,       // Type
         "1.0.0",                  // Interface version
-		DEFAULT_CONFIG	          // Default plugin configuration
+	DEFAULT_CONFIG	          // Default plugin configuration
 };
 
 typedef enum

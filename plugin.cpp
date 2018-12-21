@@ -23,7 +23,7 @@
 				"\"default\" : \"" FILTER_NAME "\", \"readonly\" : \"true\" }, " \
 			 "\"enable\": {\"description\": \"A switch that can be used to enable or disable execution of " \
 					 "the asset filter.\", " \
-				"\"displayName\": \"Enable\", " \
+				"\"displayName\": \"Enabled\", " \
 				"\"type\": \"boolean\", " \
 				"\"default\": \"false\" }, " \
 			"\"config\" : {\"description\" : \"JSON document that defines the rules for asset names.\", " \

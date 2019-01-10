@@ -2,7 +2,45 @@
 FogLAMP "asset" C++ Filter plugin
 =========================================
 
-Simple readings data transformation plugin
+Readings data transformation plugin that can include/exclude/rename asset(s)
+
+Example filter config:
+
+	{
+	"value": {
+		"rules": [{
+			"asset_name": "Random1",
+			"action": "include"
+		}, {
+			"asset_name": "Random2",
+			"action": "rename",
+			"new_asset_name": "Random92"
+		}, {
+			"asset_name": "Random3",
+			"action": "exclude"
+		}, {
+			"asset_name": "Random4",
+			"action": "rename",
+			"new_asset_name": "Random94"
+		}, {
+			"asset_name": "Random5",
+			"action": "exclude"
+		}, {
+			"asset_name": "Random6",
+			"action": "rename",
+			"new_asset_name": "Random96"
+		}, {
+			"asset_name": "Random7",
+			"action": "include"
+		}],
+		"defaultAction": "include"
+		}
+	}
+
+So there is a "rules" list to be specified, in which each rule entry mentions "asset_name" to act upon, the "action" could be "include", "exclude" or "rename". And in case of "rename" action, the "new_asset_name" is also specified.
+
+Also a "defaultAction" can be specified which could have values "include" or "exclude", this is the default action applicable to assets that haven't been explicitly mentioned in "rules" list.
+
 
 Build
 -----

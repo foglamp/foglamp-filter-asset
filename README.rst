@@ -6,8 +6,6 @@ Readings data transformation plugin that can include/exclude/rename asset(s)
 
 Example filter config:
 
-	curl -X PUT -d '{"value" : {"rules":[{"asset_name":"Random1","action":"include"},{"asset_name":"Random2","action":"rename","new_asset_name":"Random92"},{"asset_name":"Random3","action":"exclude"},{"asset_name":"Random4","action":"rename","new_asset_name":"Random94"},{"asset_name":"Random5","action":"exclude"},{"asset_name":"Random6","action":"rename","new_asset_name":"Random96"},{"asset_name":"Random7","action":"include"}], "defaultAction" : "include" }}' http://127.0.0.1:8081/foglamp/category/bench3_AssetFilter/config
-
 	{
 	"value": {
 		"rules": [{

@@ -67,6 +67,7 @@ typedef struct
 	FogLampFilter *handle;
 	std::map<std::string, AssetAction> *assetFilterConfig;
 	AssetAction	defaultAction;
+	std::string	configCatName;
 } FILTER_INFO;
 
 /**
@@ -100,6 +101,7 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 	FILTER_INFO *info = new FILTER_INFO;
 	info->handle = new FogLampFilter(FILTER_NAME, *config, outHandle, output);
 	FogLampFilter *filter = info->handle;
+	info->configCatName = config->getName();
 	
 	// Handle filter configuration
 	info->assetFilterConfig = new std::map<std::string, AssetAction>;
@@ -197,7 +199,6 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 void plugin_ingest(PLUGIN_HANDLE *handle,
 		   READINGSET *readingSet)
 {
-	//Logger::getLogger()->info("AssetFilter: plugin_ingest()");
 	FILTER_INFO *info = (FILTER_INFO *) handle;
 	FogLampFilter* filter = info->handle;
 	
@@ -234,16 +235,20 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 		if(assetAction->actn == action::INCLUDE)
 		{
 			newReadings.push_back(new Reading(**elem)); // copy original Reading object
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
 		}
 		else if(assetAction->actn == action::EXCLUDE)
 		{
 			// no need to free memory allocated for original reading object: done in ReadingSet destructor
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
 		}
 		else if(assetAction->actn == action::RENAME)
 		{
-			 Reading *newRdng = new Reading(**elem); // copy original Reading object
-			 newRdng->setAssetName(assetAction->new_asset_name);
-			 newReadings.push_back(newRdng);
+			Reading *newRdng = new Reading(**elem); // copy original Reading object
+			newRdng->setAssetName(assetAction->new_asset_name);
+			newReadings.push_back(newRdng);
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, assetAction->new_asset_name, string("Filter"));
 		}
 	}
 

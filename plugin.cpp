@@ -14,20 +14,23 @@
 #include <config_category.h>
 #include <filter.h>
 #include <reading_set.h>
+#include <version.h>
 
-#define RULES "\"rules\" : []"
+#define RULES "\\\"rules\\\" : []"
 #define FILTER_NAME "asset"
 
 #define DEFAULT_CONFIG "{\"plugin\" : { \"description\" : \"Asset filter plugin\", " \
                        		"\"type\" : \"string\", " \
-				"\"default\" : \"" FILTER_NAME "\" }, " \
+				"\"default\" : \"" FILTER_NAME "\", \"readonly\" : \"true\" }, " \
 			 "\"enable\": {\"description\": \"A switch that can be used to enable or disable execution of " \
 					 "the asset filter.\", " \
+				"\"displayName\": \"Enabled\", " \
 				"\"type\": \"boolean\", " \
 				"\"default\": \"false\" }, " \
-			"\"config\" : {\"description\" : \"Asset C filter configuration.\", " \
+			"\"config\" : {\"description\" : \"JSON document that defines the rules for asset names.\", " \
 				"\"type\" : \"JSON\", " \
-				"\"default\" : {" RULES "}} }"
+				"\"default\" : \"{" RULES "}\", " \
+				"\"order\" : \"1\", \"displayName\" : \"Asset rules\"} }"
 
 using namespace std;
 
@@ -41,11 +44,11 @@ extern "C" {
  */
 static PLUGIN_INFORMATION info = {
         FILTER_NAME,              // Name
-        "1.0.0",                  // Version
+        VERSION,                  // Version
         0,                        // Flags
         PLUGIN_TYPE_FILTER,       // Type
         "1.0.0",                  // Interface version
-		DEFAULT_CONFIG	          // Default plugin configuration
+	DEFAULT_CONFIG	          // Default plugin configuration
 };
 
 typedef enum
@@ -65,6 +68,7 @@ typedef struct
 	FogLampFilter *handle;
 	std::map<std::string, AssetAction> *assetFilterConfig;
 	AssetAction	defaultAction;
+	std::string	configCatName;
 } FILTER_INFO;
 
 /**
@@ -98,6 +102,7 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 	FILTER_INFO *info = new FILTER_INFO;
 	info->handle = new FogLampFilter(FILTER_NAME, *config, outHandle, output);
 	FogLampFilter *filter = info->handle;
+	info->configCatName = config->getName();
 	
 	// Handle filter configuration
 	info->assetFilterConfig = new std::map<std::string, AssetAction>;
@@ -195,7 +200,6 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 void plugin_ingest(PLUGIN_HANDLE *handle,
 		   READINGSET *readingSet)
 {
-	//Logger::getLogger()->info("AssetFilter: plugin_ingest()");
 	FILTER_INFO *info = (FILTER_INFO *) handle;
 	FogLampFilter* filter = info->handle;
 	
@@ -232,16 +236,20 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 		if(assetAction->actn == action::INCLUDE)
 		{
 			newReadings.push_back(new Reading(**elem)); // copy original Reading object
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
 		}
 		else if(assetAction->actn == action::EXCLUDE)
 		{
 			// no need to free memory allocated for original reading object: done in ReadingSet destructor
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
 		}
 		else if(assetAction->actn == action::RENAME)
 		{
-			 Reading *newRdng = new Reading(**elem); // copy original Reading object
-			 newRdng->setAssetName(assetAction->new_asset_name);
-			 newReadings.push_back(newRdng);
+			Reading *newRdng = new Reading(**elem); // copy original Reading object
+			newRdng->setAssetName(assetAction->new_asset_name);
+			newReadings.push_back(newRdng);
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, (*elem)->getAssetName(), string("Filter"));
+			AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName, assetAction->new_asset_name, string("Filter"));
 		}
 	}
 
@@ -249,6 +257,104 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 
 	ReadingSet *newReadingSet = new ReadingSet(&newReadings);	
 	filter->m_func(filter->m_data, newReadingSet);
+}
+
+/**
+ * Plugin reconfiguration entry point
+ *
+ * @param	handle	The plugin handle
+ * @param	newConfig	The new configuration data
+ */
+void plugin_reconfigure(PLUGIN_HANDLE *handle, const string& newConfig)
+{
+	FILTER_INFO *info = (FILTER_INFO *) handle;
+	FogLampFilter* filter = info->handle;
+
+	filter->setConfig(newConfig);
+
+	if (filter->getConfig().itemExists("config"))
+	{
+		FILTER_INFO *newInfo = new FILTER_INFO;
+		newInfo->assetFilterConfig = new std::map<std::string, AssetAction>;
+		Document	document;
+		if (document.Parse(filter->getConfig().getValue("config").c_str()).HasParseError())
+		{
+			Logger::getLogger()->error("Unable to parse filter config: '%s'", filter->getConfig().getValue("config").c_str());
+			return;
+		}
+		
+		newInfo->defaultAction = {action::INCLUDE, ""};
+		Value::MemberIterator defaultAction = document.FindMember("defaultAction");
+	    if(defaultAction == document.MemberEnd() || !defaultAction->value.IsString())
+		{
+			newInfo->defaultAction.actn = action::INCLUDE;
+			Logger::getLogger()->info("Parse asset filter config, unable to find defaultAction value: '%s', assuming 'include' for unmentioned asset names", filter->getConfig().getValue("config").c_str());
+		}
+		else
+		{
+			string actionStr= defaultAction->value.GetString();
+			for (auto & c: actionStr) c = tolower(c);
+			action actn;
+			if (actionStr == "include")
+				newInfo->defaultAction.actn = action::INCLUDE;
+			else if (actionStr == "exclude")
+				newInfo->defaultAction.actn = action::EXCLUDE;
+			else
+			{
+				Logger::getLogger()->error("Parse asset filter config, unable to parse defaultAction value: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			Logger::getLogger()->info("Parse asset filter config, default action for unmentioned asset names=%d", newInfo->defaultAction.actn);
+		}
+		
+		Value &rules = document["rules"];
+		if (!rules.IsArray())
+		{
+			Logger::getLogger()->error("Parse asset filter config, rules array is missing : '%s'", filter->getConfig().getValue("config").c_str());
+			return;
+		}
+		for (Value::ConstValueIterator iter = rules.Begin(); iter != rules.End(); ++iter)
+		{
+			if (!iter->IsObject())
+			{
+				Logger::getLogger()->error("Parse asset filter config, each entry in rules array must be an object: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			if (!iter->HasMember("asset_name") || !iter->HasMember("action"))
+			{
+				Logger::getLogger()->error("Parse asset filter config, asset_name/action is not found in the entry: '%s'", filter->getConfig().getValue("config").c_str());
+				return;
+			}
+			
+			string asset_name = (*iter)["asset_name"].GetString();
+			string actionStr= (*iter)["action"].GetString();
+			string new_asset_name = "";
+			for (auto & c: actionStr) c = tolower(c);
+			action actn;
+			if (actionStr == "include")
+				actn = action::INCLUDE;
+			else if (actionStr == "exclude")
+				actn = action::EXCLUDE;
+			else if (actionStr == "rename")
+			{
+				actn = action::RENAME;
+				if (iter->HasMember("new_asset_name"))
+					new_asset_name = (*iter)["new_asset_name"].GetString();
+				else
+				{
+					Logger::getLogger()->error("Parse asset filter config, new_asset_name is not found in the RENAME entry: '%s'", filter->getConfig().getValue("config").c_str());
+					return;
+				}
+			}
+			Logger::getLogger()->info("Parse asset filter config, Adding to assetFilterConfig map: {%s, %d, %s}", asset_name.c_str(), actn, new_asset_name.c_str());
+			(*newInfo->assetFilterConfig)[asset_name] = {actn, new_asset_name};
+		}
+		auto tmp = new std::map<std::string, AssetAction>;
+		tmp = info->assetFilterConfig;
+		info->assetFilterConfig = newInfo->assetFilterConfig;
+		delete tmp;
+		info->defaultAction = newInfo->defaultAction;
+	}
 }
 
 /**
